@@ -3,9 +3,10 @@ package drfs
 import (
 	"context"
 	"errors"
+	"os"
+
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
-	"os"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/kaiserkarel/gdfs
+module github.com/kaiserkarel/drfs
 
 go 1.13
 

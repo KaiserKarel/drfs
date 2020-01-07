@@ -1,9 +1,10 @@
 package drfs
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestImplementsReader(t *testing.T) {

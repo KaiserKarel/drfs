@@ -3,10 +3,12 @@ package drfs_test
 import (
 	"context"
 	"fmt"
-	"github.com/kaiserkarel/gdfs"
-	"google.golang.org/api/drive/v3"
 	"io"
 	"os"
+
+	"google.golang.org/api/drive/v3"
+
+	"github.com/kaiserkarel/drfs"
 )
 
 func ExampleFile_Write() {
@@ -120,12 +122,12 @@ func ExampleFile_Copy_To_Gdfs() {
 		panic(fmt.Sprintf("unable to open lorem.txt: %v", err))
 	}
 
-	gdfsFile, err := drfs.Open(ctx, driveService, fileName)
+	drfsFile, err := drfs.Open(ctx, driveService, fileName)
 	if err != nil {
 		panic(fmt.Sprintf("unable to open file: %v", err))
 	}
 
-	_, err = io.Copy(gdfsFile, lorem)
+	_, err = io.Copy(drfsFile, lorem)
 	if err != nil {
 		panic(fmt.Sprintf("unable to copy lorem to drfs: %v", err))
 	}
