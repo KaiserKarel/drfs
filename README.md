@@ -25,17 +25,17 @@ Drive provides the following APIs to interact with files, comments and replies:
 #### API Overview
 *warning: oversimplification*
 ```
-file.create             -> file{fileID}
-file.get     (fileID)   -> file{...}
-file.update  (file)     -> ok|error 
+file.create     (...)         -> file{fileID}
+file.get        (fileID)      -> file{...}
+file.update     (file)        -> ok|error 
 
-comment.create  (commentID)   -> comment{commentID}
+comment.create  (...)         -> comment{commentID}
 comment.get     (commentID)   -> comment{...}
 comment.update  (commentID)   -> ok|error
 
-reply.create  (replyID)   -> reply{replyID}
-reply.get     (replyID)   -> reply{...}
-reply.update  (replyID)   -> ok|error 
+reply.create    (...)         -> reply{replyID}
+reply.get       (replyID)     -> reply{...}
+reply.update    (replyID)     -> ok|error 
 ```
 
 These IDs are strings and non-sequential.
