@@ -11,12 +11,13 @@ type File struct {
 	docID     string
 	commentID string
 
-	service *drive.Service
-	file    *drive.File
-	comment *drive.Comment
-	reply   *drive.Reply
-	replIds []string
-	cursor  int
+	service     *drive.Service
+	file        *drive.File
+	comment     *drive.Comment
+	reply       *drive.Reply
+	replIds     []string
+	cursor      int
+	replyCursor int
 }
 
 // maxReplySize defines the maximum number of bytes Drive allows in the content of
@@ -59,8 +60,9 @@ func Remove(f *File) error {
 }
 
 func (f *File) Read(p []byte) (int, error) {
+
 	replyService := drive.NewRepliesService(f.service)
-	replyID := f.replIds[f.cursor]
+	replyID := f.replIds[f.replyCursor]
 
 	reply, err := replyService.Get(f.docID, f.commentID, replyID).Fields("*").Do()
 	if err != nil {
@@ -68,11 +70,19 @@ func (f *File) Read(p []byte) (int, error) {
 	}
 
 	var wi int
-	for i := 0; i < len(reply.Content) && i < len(reply.Content); i++ {
-		p[wi] = []byte(reply.Content)[i]
+	for i := f.cursor; i < len(reply.Content) && i < len(p); i++ {
+		p[i] = []byte(reply.Content)[i]
 		wi++
 	}
-	f.cursor += 1
+
+	f.cursor += wi
+
+	// check if we exhausted the current reply
+	if wi == len(reply.Content) {
+		f.replyCursor++
+		f.cursor = 0
+	}
+
 	return wi, nil
 }
 

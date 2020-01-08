@@ -3,8 +3,8 @@ package drfs_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
+	// "io"
+	// "os"
 
 	"google.golang.org/api/drive/v3"
 
@@ -100,36 +100,4 @@ func ExampleFile_Reopen() {
 	// Output:
 	// Written earlier
 	// Written now
-}
-
-func ExampleFile_Copy_To_Gdfs() {
-	var fileName = "examples/lorem.txt"
-
-	// This test takes about 150s, thus we don't run automatically run it.
-	if !(os.Getenv("LONG_TESTS") == "TRUE") {
-		fmt.Println("Skipping ExampleFile_Copy_To_Gdfs")
-		return
-	}
-
-	ctx := context.Background()
-	driveService, err := drive.NewService(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	lorem, err := os.Open("lorem.txt")
-	if err != nil {
-		panic(fmt.Sprintf("unable to open lorem.txt: %v", err))
-	}
-
-	drfsFile, err := drfs.Open(ctx, driveService, fileName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to open file: %v", err))
-	}
-
-	_, err = io.Copy(drfsFile, lorem)
-	if err != nil {
-		panic(fmt.Sprintf("unable to copy lorem to drfs: %v", err))
-	}
-	// Output:
 }

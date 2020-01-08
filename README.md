@@ -58,3 +58,12 @@ However due to the usage of a single comment thread per file; implementing [io.W
 is quite difficult and inefficient. gdfs.Files cannot be concurrently written to, which is a requirement for `WriterAt`.
 
 *The only option I see is, to lock reply creation and have calls to WriteAt update existing comments. Which I implement in v2* 
+
+## Benchmarks
+
+Due to the nature of drfs (API calls not optimized for performance) the benchmarks are quite variable. 
+
+```
+BenchmarkFile_Read_Small-4             1        1613966605 ns/op
+PASS
+```
