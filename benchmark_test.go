@@ -3,21 +3,21 @@ package drfs_test
 import (
 	"context"
 	"fmt"
-	"github.com/kaiserkarel/drfs"
-	"google.golang.org/api/drive/v3"
 	"io"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/kaiserkarel/drfs"
+	"google.golang.org/api/drive/v3"
 )
 
-func init()  {
+func init() {
 	var err error
 	service, err = drive.NewService(context.Background())
 	if err != nil {
 		log.Fatalf("unable to init drive.Service: %w", err)
 	}
-
 }
 
 var service *drive.Service
