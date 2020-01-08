@@ -15,8 +15,8 @@ limitations under the License.
 */
 package main
 
-import "main/cmd"
+import "github.com/kaiserkarel/drfs/drfs/cmd"
 
 func main() {
-  cmd.Execute()
+	cmd.Execute()
 }
