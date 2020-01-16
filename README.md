@@ -25,5 +25,15 @@ Maybe more later. `package e2e` contains assorted tests.
 
 ### Bugs
 
-Currently many. drfs can correctly upload and download `testdata/lorem_short.txt`. However `lorem.txt` results in some errors (three missing bytes)
+Currently many. drfs can correctly upload and download `testdata/lorem_short.txt`. However `lorem.txt` results in some errors (16 missing bytes)
  
+### Speed
+
+The rate limits of Drive should allow for an upload speed of approximately 
+400kB/s. Currently DRFS wastes 50% of API calls by updating file indexes. 
+This can be reduced to about 2% by having a single global file index and updating 
+this after every batch write.
+
+Each (service) account has a rate limit of 10% of the project rate limit. Using multiple
+accounts thus increases the amount of API calls by a factor 10.
+

@@ -3,7 +3,6 @@ package drfs
 import (
 	"context"
 	"io"
-	"log"
 	"time"
 
 	"google.golang.org/api/drive/v3"
@@ -34,13 +33,9 @@ func (b *Bucket) WriteCtx(ctx context.Context, s Service, fileID string, p []byt
 	var err error
 	var written int
 
-	log.Printf("bucket %d has cap %d", b.Header.Number, b.Header.Capacity)
 	if b.Header.Capacity == 0 {
 		data := string(p[:min(EffectiveReplySize, len(p))])
-		payload = padding + data
-		if len(payload) == MaxReplySize-1 {
-			payload += padding
-		}
+		payload = padding + data + padding
 		err = retry(ctx, func() error {
 			newHeader, err = CreateReply(ctx, s, fileID, *b, &drive.Reply{Content: payload})
 			return err
@@ -60,7 +55,6 @@ func (b *Bucket) WriteCtx(ctx context.Context, s Service, fileID string, p []byt
 		b.oldState = &old
 	}
 
-	log.Printf("bucket %d wrote %d cap %d", b.Header.Number, written, b.Header.Capacity)
 	if err != nil {
 		return 0, err
 	}
@@ -130,22 +124,16 @@ func (b *Bucket) ReadCtx(ctx context.Context, s Service, fileID string, p []byte
 
 	reply := b.replies.Replies[b.ri]
 
-	var content []byte
-	if len(reply.Content) == MaxReplySize {
-		content = []byte(reply.Content)[1 : EffectiveReplySize+1]
-	} else {
-		content = []byte(reply.Content)[1:]
-	}
-
+	content := []byte(reply.Content)[1 : len(reply.Content)-1]
 	copy(p, content[b.cursor:])
-	written := min(len(content[b.cursor:]), len(p))
+	read := min(len(content[b.cursor:]), len(p))
 
-	b.cursor += written
+	b.cursor += read
 	if b.cursor == EffectiveReplySize {
 		b.cursor = 0
 		b.ri++
 	}
-	return written, nil
+	return read, nil
 }
 
 func (b *Bucket) Reply() drive.Reply {
