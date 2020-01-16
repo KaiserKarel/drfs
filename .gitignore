@@ -15,3 +15,4 @@ credentials.json
 *.out
 
 .idea
+*.secret.json

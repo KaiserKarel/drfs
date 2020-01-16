@@ -14,56 +14,16 @@ and at least send you a warning, at most ban your account.
 
 ### How does it work?
 
-Each branch contains a different version of GDFS. You are looking at `v1`, which is I mainly used to explore the Drive 
-API and as a prototype. 
+Currently this is a WIP. The main module contains the file primites. 
+`package os` implements functions which mimick the standard library 
+`os` functions. `package recovery` contains helpers for reindexingand 
+recovering files.
 
-The usages at Drive are determined by total data stored; not files created nor associated data stored (such as 
-file history, comments and replies). We can thus "cheat" their storage policy by putting all our data in comment threads.
+### Tests
 
-Drive provides the following APIs to interact with files, comments and replies:
+Maybe more later. `package e2e` contains assorted tests.
 
-#### API Overview
-*warning: oversimplification*
-```
-file.create     (...)         -> file{fileID}
-file.get        (fileID)      -> file{...}
-file.update     (file)        -> ok|error 
+### Bugs
 
-comment.create  (...)         -> comment{commentID}
-comment.get     (commentID)   -> comment{...}
-comment.update  (commentID)   -> ok|error
-
-reply.create    (...)         -> reply{replyID}
-reply.get       (replyID)     -> reply{...}
-reply.update    (replyID)     -> ok|error 
-```
-
-These IDs are strings and non-sequential.
-
-The `v1` implementation is quite naive. A `gdfs.File` is a file-comment association. Each comment reply contains at most
-4096 bytes encoded as UTF-8, which is the maximum allowed size. Each file write creates a new reply. This model implements 
-the following `io` interfaces:
-
-```go
-type Reader interface {
-    Read(p []byte) (n int, err error)
-}
-
-type Writer interface {
-    Write(p []byte) (n int, err error)
-}
-```
-
-However due to the usage of a single comment thread per file; implementing [io.WriterAt](https://golang.org/pkg/io/#WriterAt) 
-is quite difficult and inefficient. gdfs.Files cannot be concurrently written to, which is a requirement for `WriterAt`.
-
-*The only option I see is, to lock reply creation and have calls to WriteAt update existing comments. Which I implement in v2* 
-
-## Benchmarks
-
-Due to the nature of drfs (API calls not optimized for performance) the benchmarks are quite variable. 
-
-```
-BenchmarkFile_Read_Small-4             1        1613966605 ns/op
-PASS
-```
+Currently many. drfs can correctly upload and download `testdata/lorem_short.txt`. However `lorem.txt` results in some errors (three missing bytes)
+ 
