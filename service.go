@@ -77,15 +77,13 @@ func AppendToReply(ctx context.Context, s Service, fileID string, bucket Bucket,
 	}
 
 	reply.Content = reply.Content[:len(reply.Content)-1] + content + padding
+
+	// TODO remove this once certain no 1 of errors are present
 	if len(reply.Content) > MaxReplySize {
 		return nil, fmt.Errorf("reply exceeded max size: %d", len(reply.Content))
 	}
 
-	if len(reply.Content) == MaxReplySize {
-		bucket.Header.Capacity = 0
-	} else {
-		bucket.Header.Capacity = MaxReplySize - len(reply.Content) - 1
-	}
+	bucket.Header.Capacity = MaxReplySize - len(reply.Content)
 
 	_, err = service.RepliesService().
 		Update(fileID, bucket.CommentID, bucket.Header.Tail, reply).

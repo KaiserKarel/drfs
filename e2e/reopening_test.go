@@ -7,22 +7,40 @@ import (
 	"os"
 	"time"
 
+	drfs "github.com/kaiserkarel/drfs/os"
 	"github.com/kaiserkarel/drfs/recovery"
-
 	"github.com/stretchr/testify/assert"
 
-	drfs "github.com/kaiserkarel/drfs/os"
 	"github.com/stretchr/testify/require"
 
 	"testing"
 )
 
-func TestReopeningResultsInSameFile(t *testing.T) {
+func TestReopeningResultsInSameFileShort(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping long test")
 	}
 
-	var loremFile = "../testdata/lorem_short.txt"
+	reopenE2E(t, "../testdata/lorem_short.txt")
+}
+
+func TestReopeningResultsInSameFileMedium(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
+
+	reopenE2E(t, "../testdata/lorem_medium.txt")
+}
+
+func TestReopeningResultsInSameFileLorem(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
+
+	reopenE2E(t, "../testdata/lorem.txt")
+}
+
+func reopenE2E(t *testing.T, src string) {
 	var fileName = fmt.Sprintf("TestReopeningResultsInSameIndex_%s", time.Now().String())
 
 	file, err := drfs.Open(fileName)
@@ -33,7 +51,7 @@ func TestReopeningResultsInSameFile(t *testing.T) {
 
 	assert.LessOrEqual(t, fstat.QuotaBytesUsed(), int64(0), "new file should consume no quota")
 
-	lorem, err := os.Open(loremFile)
+	lorem, err := os.Open(src)
 	require.NoError(t, err, "unable to open lorem")
 
 	_, err = io.Copy(file, lorem)
@@ -71,11 +89,12 @@ func TestReopeningResultsInSameFile(t *testing.T) {
 
 	assert.Equal(t, rStats.Size(), stat2.Size(), "index size should match recovery size")
 
-	lorem, err = os.Open(loremFile)
+	lorem, err = os.Open(src)
 	require.NoError(t, err, "should open lorem")
 
 	log.Printf("diffing")
 	diff(t, lorem, file)
+	lorem.Close()
 }
 
 const size = 4094
