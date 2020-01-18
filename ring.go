@@ -4,7 +4,7 @@ import (
 	"container/ring"
 )
 
-func newBucketRing(bs []*Bucket) *bucketRing {
+func newThreadRing(bs []*Thread) *threadRing {
 	if len(bs) < 1 {
 		panic("0 length rings are invalid")
 	}
@@ -17,15 +17,23 @@ func newBucketRing(bs []*Bucket) *bucketRing {
 		r.Value = b
 		r = r.Next()
 	}
-	return &bucketRing{r}
+	return &threadRing{r}
 }
 
-type bucketRing struct {
+type threadRing struct {
 	*ring.Ring
 }
 
-func (b *bucketRing) Get() *Bucket {
-	val := b.Value.(*Bucket)
-	b.Ring = b.Next()
+func (b *threadRing) Get() *Thread {
+	val := b.Peek()
+	b.Next()
 	return val
+}
+
+func (b *threadRing) Peek() *Thread {
+	return b.Value.(*Thread)
+}
+
+func (b *threadRing) Next() {
+	b.Ring = b.Ring.Next()
 }

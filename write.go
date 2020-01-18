@@ -3,7 +3,10 @@ package drfs
 import (
 	"context"
 	"fmt"
+	"log"
+	"math"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -17,9 +20,14 @@ func (f *File) Write(p []byte) (int, error) {
 
 // Write using the provided context for API calls.
 func (f *File) WriteCtx(ctx context.Context, p []byte) (int, error) {
+	log.Printf("requested: %d", len(p))
 	var n int
 	for n <= len(p) {
+		if len(p[n:]) == 0 {
+			return n, nil
+		}
 		a, err := f.WriteBatch(context.TODO(), p[n:])
+		log.Printf("WriteCtx: a %d n %d err%s", a, n, err)
 		n += a
 		if err != nil || a == 0 {
 			return n, err
@@ -32,29 +40,52 @@ func (f *File) WriteCtx(ctx context.Context, p []byte) (int, error) {
 func (f *File) WriteBatch(ctx context.Context, p []byte) (int, error) {
 	var numbuckets = len(f.index.Buckets)
 	var errs = make([]error, numbuckets)
-	var segments = slice(p, EffectiveReplySize)
 	var written = make([]int, numbuckets)
-	var incompleteWrite = false
+	var incompleteWrite = newAtomicCheck()
+	grp := &sync.WaitGroup{}
 
-	grp := sync.WaitGroup{}
-	for i := 0; i < numbuckets && i < len(segments); i++ {
-		segment := segments[i]
-		i := i
-		bucket := f.writers.Get()
+	var put = func(thread *Thread, buf []byte, i int) {
 		grp.Add(1)
+		log.Printf("b %d payload: %v", thread.Header.Number, len(buf))
+
 		go func() {
-			n, err := bucket.WriteCtx(context.TODO(), f.service, f.file.Id, p[segment.lower:segment.upper])
+			var err error
+
+			if thread.Capacity() == 0 {
+				err = thread.Put(context.TODO(), buf)
+			} else {
+				err = thread.Update(context.TODO(), buf)
+			}
+
 			errs[i] = err
-			written[i] = n
-			if bucket.Header.Capacity > 0 {
-				incompleteWrite = true
+			written[i] = len(buf)
+			if thread.Header.Capacity > 0 {
+				incompleteWrite.set()
 			}
 			grp.Done()
 		}()
 	}
+
+	last := f.writers.Peek()
+	var offset int
+	var skip int
+	if last.Capacity() > 0 {
+		skip = 1
+		offset = min(len(p), last.Capacity())
+		f.writers.Next()
+		put(last, p[:offset], 0)
+	}
+
+	var remaining = p[offset:]
+	var segments = slice(remaining, EffectiveReplySize)
+
+	for i := skip; i < numbuckets && i < len(segments); i++ {
+		payload := remaining[segments[i-skip].lower:segments[i-skip].upper]
+		put(f.writers.Get(), payload, i)
+	}
 	grp.Wait()
 
-	if incompleteWrite {
+	if incompleteWrite.isSet() {
 		f.writers.Ring = f.writers.Prev()
 	}
 
@@ -84,4 +115,46 @@ func (f *File) WriteBatch(ctx context.Context, p []byte) (int, error) {
 	}
 
 	return sum(written), nil
+}
+
+func slice(p []byte, size int) []bounds {
+	var b []bounds
+	length := len(p)
+	segmentCount := int(math.Ceil(float64(length) / float64(size)))
+	var start, stop int
+	for i := 0; i < segmentCount; i += 1 {
+		start = i * size
+		stop = start + size
+		if stop > length {
+			stop = length
+		}
+		b = append(b, bounds{lower: start, upper: stop})
+	}
+	return b
+}
+
+func sum(p []int) int {
+	var res int
+	for _, i := range p {
+		res += i
+	}
+	return res
+}
+
+type atomicCheck struct {
+	flag int32
+}
+
+func newAtomicCheck() *atomicCheck {
+	return &atomicCheck{0}
+}
+
+func (c *atomicCheck) isSet() bool {
+	return c.flag > 0
+}
+
+func (c *atomicCheck) set() {
+	if !atomic.CompareAndSwapInt32(&c.flag, 0, 1) {
+		panic("setting an already set check!") // indicates programming error within this library
+	}
 }

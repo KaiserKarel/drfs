@@ -16,6 +16,14 @@ import (
 	"testing"
 )
 
+func TestReopeningResultsInSameFileALR(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
+
+	reopenE2E(t, "../testdata/alr.gen.txt")
+}
+
 func TestReopeningResultsInSameFileShort(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping long test")

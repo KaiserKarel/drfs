@@ -30,7 +30,7 @@ func (f *File) Fstat() (FileInfo, error) {
 
 	f.file = refresh
 
-	return stat{
+	return &stat{
 		fileID:   f.file.Id,
 		fileName: f.file.Name,
 		size:     f.size(),
@@ -41,7 +41,7 @@ func (f *File) Fstat() (FileInfo, error) {
 
 // Stat returns file stats, mimicking the os API
 func (f *File) Stat() (os.FileInfo, error) {
-	return stat{
+	return &stat{
 		fileID:  f.file.Name,
 		size:    f.size(),
 		modtime: f.modTime(),
@@ -58,34 +58,34 @@ type stat struct {
 	sys            *drive.File
 }
 
-func (s stat) ID() string {
+func (s *stat) ID() string {
 	return s.fileID
 }
 
-func (s stat) Name() string {
+func (s *stat) Name() string {
 	return s.fileName
 }
 
-func (s stat) Size() int64 {
+func (s *stat) Size() int64 {
 	return s.size
 }
 
-func (s stat) Mode() os.FileMode {
+func (s *stat) Mode() os.FileMode {
 	return os.ModeIrregular
 }
 
-func (s stat) ModTime() time.Time {
+func (s *stat) ModTime() time.Time {
 	return s.modtime
 }
 
-func (s stat) IsDir() bool {
+func (s *stat) IsDir() bool {
 	return false
 }
 
-func (s stat) Sys() interface{} {
+func (s *stat) Sys() interface{} {
 	return s.sys
 }
 
-func (s stat) QuotaBytesUsed() int64 {
+func (s *stat) QuotaBytesUsed() int64 {
 	return s.quotaBytesUsed
 }

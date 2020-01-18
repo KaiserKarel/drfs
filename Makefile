@@ -9,4 +9,4 @@ lorem:
 	cd examples/lorem && GOOGLE_APPLICATION_CREDENTIALS=$(APP_CREDS) go run lorem.go
 
 tests:
-	cd tests && GOOGLE_APPLICATION_CREDENTIALS=$(APP_CREDS) go test
+	cd e2e && GOOGLE_APPLICATION_CREDENTIALS=$(APP_CREDS) go test

@@ -25,7 +25,7 @@ Maybe more later. `package e2e` contains assorted tests.
 
 ### Bugs
 
-Currently many. drfs can correctly upload and download `testdata/lorem_short.txt`. However `lorem.txt` results in some errors (16 missing bytes)
+Probably many, but none known so far. drfs can correctly upload and download the files in the `testdata` directory. 
  
 ### Speed
 

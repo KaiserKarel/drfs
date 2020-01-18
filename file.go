@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 
 	"github.com/google/uuid"
@@ -28,7 +27,7 @@ type FileHeader struct {
 func (f FileHeader) MustMarshall() []byte {
 	p, err := json.Marshal(f)
 	if err != nil {
-		panic(fmt.Errorf("marshalling fileheader failed: %w", err))
+		panic(fmt.Errorf("marshaling fileheader failed: %w", err))
 	}
 	return p
 }
@@ -58,15 +57,15 @@ func OpenCtx(ctx context.Context, file *drive.File, service Service) (*File, err
 		return nil, fmt.Errorf("unable to index file: %w", err)
 	}
 
-	var writerlist = make([]*Bucket, len(index.Buckets))
+	var writerlist = make([]*Thread, len(index.Buckets))
 	copy(writerlist, index.Buckets)
 	sort.Sort(byLengthThenNumber(writerlist))
 
 	return &File{
 		file:    file,
 		index:   *index,
-		writers: newBucketRing(writerlist),
-		readers: newBucketRing(index.Buckets),
+		writers: newThreadRing(writerlist),
+		readers: newThreadRing(index.Buckets),
 		service: service,
 	}, nil
 }
@@ -75,7 +74,7 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 	options.setDefaults()
 
 	var fileheader = FileHeader{FileOptions: options}
-	var buckets = make([]*Bucket, options.NumThreads)
+	var buckets = make([]*Thread, options.NumThreads)
 
 	service, err := s.Take(context.TODO(), 2)
 	if err != nil {
@@ -136,9 +135,11 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 				}
 
 				comments[i] = comment
-				buckets[i] = &Bucket{
+				buckets[i] = &Thread{
+					FileID:    file.Id,
 					CommentID: comment.Id,
 					Header:    *header,
+					service:   s,
 					cursor:    0,
 					ri:        0,
 					replies:   nil,
@@ -173,8 +174,8 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 			Header:  fileheader,
 			Buckets: buckets,
 		},
-		writers: newBucketRing(buckets),
-		readers: newBucketRing(buckets),
+		writers: newThreadRing(buckets),
+		readers: newThreadRing(buckets),
 		service: s,
 	}, nil
 }
@@ -182,8 +183,8 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 type File struct {
 	file    *drive.File
 	index   Index
-	writers *bucketRing
-	readers *bucketRing
+	writers *threadRing
+	readers *threadRing
 	service Service
 }
 
@@ -198,28 +199,4 @@ func (f *File) Index() Index {
 type bounds struct {
 	lower int
 	upper int
-}
-
-func slice(p []byte, size int) []bounds {
-	var b []bounds
-	length := len(p)
-	segmentCount := int(math.Ceil(float64(length) / float64(size)))
-	var start, stop int
-	for i := 0; i < segmentCount; i += 1 {
-		start = i * size
-		stop = start + size
-		if stop > length {
-			stop = length
-		}
-		b = append(b, bounds{lower: start, upper: stop})
-	}
-	return b
-}
-
-func sum(p []int) int {
-	var res int
-	for _, i := range p {
-		res += i
-	}
-	return res
 }

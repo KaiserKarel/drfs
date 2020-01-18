@@ -37,7 +37,7 @@ func (f *File) ReadBatch(ctx context.Context, p []byte) (int, error) {
 		grp.Add(1)
 		go func() {
 			defer grp.Done()
-			n, err := bucket.ReadCtx(context.TODO(), f.service, f.file.Id, p[segment.lower:segment.upper])
+			n, err := bucket.ReadCtx(context.TODO(), p[segment.lower:segment.upper])
 			read[i] = n
 			errs[i] = err
 		}()

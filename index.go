@@ -16,21 +16,21 @@ var (
 // Index describes the structure of a file.
 type Index struct {
 	Header  FileHeader
-	Buckets []*Bucket
+	Buckets []*Thread
 }
 
 // IndexFromFile queries the buckets from a file to generate an Index.
 func IndexFromFile(ctx context.Context, s Service, file *drive.File) (*Index, error) {
 	var fileheader *FileHeader
-	var buckets []*Bucket
+	var buckets []*Thread
 
-	service, err := s.Take(ctx, 6) // 512 comments is the default per drfsFile. 100 pages per pagination means at most
+	client, err := s.Take(ctx, 6) // 512 comments is the default per drfsFile. 100 pages per pagination means at most
 	// it will take 6 calls in the paginator
 	if err != nil {
 		return nil, err
 	}
 
-	err = service.CommentsService().List(file.Id).Fields("*").PageSize(MaxPages).Pages(ctx, func(list *drive.CommentList) error {
+	err = client.CommentsService().List(file.Id).Fields("*").PageSize(MaxPages).Pages(ctx, func(list *drive.CommentList) error {
 		for _, comment := range list.Comments {
 			payload := strings.NewReader(comment.Content)
 			threadheader, err := ThreadHeaderFromJSON(payload)
@@ -48,8 +48,10 @@ func IndexFromFile(ctx context.Context, s Service, file *drive.File) (*Index, er
 				continue
 			}
 
-			buckets = append(buckets, &Bucket{
+			buckets = append(buckets, &Thread{
+				FileID:    file.Id,
 				CommentID: comment.Id,
+				service:   s,
 				Header:    *threadheader,
 			})
 		}
@@ -72,7 +74,7 @@ func IndexFromFile(ctx context.Context, s Service, file *drive.File) (*Index, er
 	}, nil
 }
 
-type byHeaderNumber []*Bucket
+type byHeaderNumber []*Thread
 
 func (s byHeaderNumber) Len() int {
 	return len(s)

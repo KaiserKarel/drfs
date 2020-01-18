@@ -10,6 +10,6 @@ func (f *File) size() int64 {
 }
 
 // size computes the amount of bytes in the bucket using the header information.
-func (b *Bucket) size() int64 {
-	return b.Header.Length*EffectiveReplySize - int64(b.Header.Capacity)
+func (t *Thread) size() int64 {
+	return t.Header.Length*EffectiveReplySize - int64(t.Header.Capacity)
 }
