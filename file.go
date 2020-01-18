@@ -70,18 +70,18 @@ func OpenCtx(ctx context.Context, file *drive.File, service Service) (*File, err
 	}, nil
 }
 
-func CreateFileCtx(ctx context.Context, s Service, fileName string, options FileOptions) (*File, error) {
+func CreateFileCtx(ctx context.Context, service Service, fileName string, options FileOptions) (*File, error) {
 	options.setDefaults()
 
 	var fileheader = FileHeader{FileOptions: options}
 	var buckets = make([]*Thread, options.NumThreads)
 
-	service, err := s.Take(context.TODO(), 2)
+	client, err := service.Take(context.TODO(), 2)
 	if err != nil {
 		return nil, err
 	}
 
-	file, err := service.FilesService().
+	file, err := client.FilesService().
 		Create(&drive.File{Name: fileName}).
 		Fields("id").
 		Context(context.TODO()).
@@ -90,9 +90,9 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 		return nil, err
 	}
 
-	emails := s.Emails()
-	if len(emails) > 2 {
-		err = ensurePermissionsSet(ctx, service, emails, file.Id)
+	emails := service.Emails()
+	if len(emails) > 1 {
+		err = ensurePermissionsSet(ctx, client, emails, file.Id)
 		if err != nil {
 			return nil, fmt.Errorf("unable to set permissions: %w", err)
 		}
@@ -104,8 +104,13 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 	// create the file header itself.
 	grp.Go(func() error {
 		return retry(ctx, func() error {
+			client, err := service.Take(context.TODO(), 1)
+			if err != nil {
+				return err
+			}
+
 			header := FileHeader{options}
-			_, err = service.CommentsService().
+			_, err = client.CommentsService().
 				Create(file.Id, &drive.Comment{Content: string(header.MustMarshall())}).
 				Context(context.TODO()).Fields("id").
 				Do()
@@ -115,18 +120,20 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 
 	// create individual threads.
 	for i := 0; i < options.NumThreads; i++ {
-		service, err = s.Take(context.TODO(), 2)
-		if err != nil {
-			return nil, err
-		}
+
 		i := i
 		grp.Go(func() error {
 			return retry(ctx, func() error {
+				client, err := service.Take(context.TODO(), 1)
+				if err != nil {
+					return err
+				}
+
 				header := &ThreadHeader{
 					Number: i,
 					UUID:   uuid.New(),
 				}
-				comment, err := service.CommentsService().
+				comment, err := client.CommentsService().
 					Create(file.Id, &drive.Comment{Content: string(header.MustMarshall())}).
 					Context(context.TODO()).Fields("id").
 					Do()
@@ -139,7 +146,7 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 					FileID:    file.Id,
 					CommentID: comment.Id,
 					Header:    *header,
-					service:   s,
+					service:   service,
 					cursor:    0,
 					ri:        0,
 					replies:   nil,
@@ -152,12 +159,12 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 
 	err = grp.Wait()
 	if err != nil {
-		service, limitErr := s.Take(context.TODO(), 2)
+		client, limitErr := service.Take(context.TODO(), 1)
 		if limitErr != nil {
 			return nil, fmt.Errorf("%w (%s)", err, limitErr)
 		}
 
-		deleteErr := service.FilesService().
+		deleteErr := client.FilesService().
 			Delete(file.Id).
 			Fields("id").
 			Context(context.TODO()).
@@ -176,7 +183,7 @@ func CreateFileCtx(ctx context.Context, s Service, fileName string, options File
 		},
 		writers: newThreadRing(buckets),
 		readers: newThreadRing(buckets),
-		service: s,
+		service: service,
 	}, nil
 }
 

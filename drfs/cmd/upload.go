@@ -16,16 +16,20 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
+	"io"
+	"os"
+
+	drfs "github.com/kaiserkarel/drfs/os"
+
 	"github.com/spf13/cobra"
 )
 
-var recursive bool
-
 // backupCmd represents the backup command
-var backupCmd = &cobra.Command{
-	Use:   "backup",
-	Short: "Back up a file to DRFS",
-	Long: `Store files in DRFS. If the file name already exists; backup throws an error (DRFS cannot update 
+var uploadCmd = &cobra.Command{
+	Use:   "upload",
+	Short: "Upload up a file to DRFS",
+	Long: `Upload files in DRFS. If the file name already exists; backup throws an error (DRFS cannot update 
 		files at the moment`,
 	Run: func(cmd *cobra.Command, args []string) {
 		backup(cmd, args)
@@ -33,20 +37,29 @@ var backupCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(backupCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	backupCmd.PersistentFlags().BoolVarP(&recursive, "recursive", "-r", false, "recurse directory and copy all files")
-
-}
-
-func recursiveBackup(cmd *cobra.Command, args []string) {
-
+	rootCmd.AddCommand(uploadCmd)
 }
 
 func backup(cmd *cobra.Command, args []string) {
+	var fileName = args[0]
+	src, err := os.Open(fileName)
+	if err != nil {
+		fmt.Printf("cannot open local file: %s", err)
+		os.Exit(1)
+	}
 
+	fmt.Println("creating drfs file")
+	dst, err := drfs.Open(fileName)
+	if err != nil {
+		fmt.Printf("cannot open drfs file: %s", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("starting transfer")
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		fmt.Printf("cannot copy %s to drfs: %s", fileName, err)
+		os.Exit(1)
+	}
+	fmt.Println("upload complete")
 }

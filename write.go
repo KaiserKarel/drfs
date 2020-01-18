@@ -3,7 +3,6 @@ package drfs
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -20,14 +19,12 @@ func (f *File) Write(p []byte) (int, error) {
 
 // Write using the provided context for API calls.
 func (f *File) WriteCtx(ctx context.Context, p []byte) (int, error) {
-	log.Printf("requested: %d", len(p))
 	var n int
 	for n <= len(p) {
 		if len(p[n:]) == 0 {
 			return n, nil
 		}
 		a, err := f.WriteBatch(context.TODO(), p[n:])
-		log.Printf("WriteCtx: a %d n %d err%s", a, n, err)
 		n += a
 		if err != nil || a == 0 {
 			return n, err
@@ -46,7 +43,6 @@ func (f *File) WriteBatch(ctx context.Context, p []byte) (int, error) {
 
 	var put = func(thread *Thread, buf []byte, i int) {
 		grp.Add(1)
-		log.Printf("b %d payload: %v", thread.Header.Number, len(buf))
 
 		go func() {
 			var err error
