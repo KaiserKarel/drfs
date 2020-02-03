@@ -1,0 +1,4 @@
+Bugfix: Correctly create missing subdirs in data/
+
+https://github.com/kaiserkarel/drfs/restic/restic/issues/1528
+https://github.com/kaiserkarel/drfs/restic/restic/pull/1529

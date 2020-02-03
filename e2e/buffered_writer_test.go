@@ -14,6 +14,9 @@ import (
 )
 
 func TestBufferedWriter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
 	dest, err := dros.Open(fmt.Sprintf("TestBufferedWriter_%s", time.Now().String()))
 	require.NoError(t, err)
 

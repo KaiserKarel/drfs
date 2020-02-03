@@ -11,6 +11,9 @@ import (
 // to Drive removing leading spaces in comments. As a result the total size of a reply available to us is 4095 bytes;
 // or the drfs.EffectiveReplySize.
 func TestLeadingEndingSpaceDissapears(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
 	service, err := drive.NewService(context.Background())
 	if err != nil {
 		t.Fatalf("unable to init drive service: %s", err)

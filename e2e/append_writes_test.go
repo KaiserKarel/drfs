@@ -14,6 +14,9 @@ import (
 )
 
 func TestAppendWrites(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
 	var fileName = fmt.Sprintf("TestAppendWrites%s", time.Now().String())
 
 	file, err := drfs.Open(fileName)

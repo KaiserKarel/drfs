@@ -16,6 +16,9 @@ import (
 // seemed file length was correct, but read text was forward shifted
 // by ~ 16 characters
 func TestReadWrite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long test")
+	}
 	var fileName = fmt.Sprintf("TestReadWrite_%s", time.Now().String())
 
 	f, err := os.Open(fileName)

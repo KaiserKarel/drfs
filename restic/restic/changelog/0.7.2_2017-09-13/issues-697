@@ -1,0 +1,4 @@
+Enhancement: Automatically generate man pages for all restic commands
+
+https://github.com/kaiserkarel/drfs/restic/restic/issues/697
+https://github.com/kaiserkarel/drfs/restic/restic/pull/1147
