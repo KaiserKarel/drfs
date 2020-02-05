@@ -3,6 +3,7 @@ package drfs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -11,6 +12,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/drive/v3"
+)
+
+var (
+	ErrNotFound = errors.New("file not found")
 )
 
 // maxReplySize defines the maximum number of bytes Drive allows in the content of
@@ -70,7 +75,7 @@ func OpenCtx(ctx context.Context, file *drive.File, service Service) (*File, err
 	}, nil
 }
 
-func CreateFileCtx(ctx context.Context, service Service, fileName string, options FileOptions) (*File, error) {
+func CreateFileCtx(ctx context.Context, service Service, fileName string, options FileOptions, properties map[string]string) (*File, error) {
 	options.setDefaults()
 
 	var fileheader = FileHeader{FileOptions: options}
@@ -81,9 +86,14 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 		return nil, err
 	}
 
+	properties[IsDrfsFile] = PropertyTrue
+
 	file, err := client.FilesService().
-		Create(&drive.File{Name: fileName}).
-		Fields("id").
+		Create(&drive.File{
+			Name: fileName,
+			AppProperties: properties,
+		}).
+		Fields("id", "appProperties").
 		Context(context.TODO()).
 		Do()
 	if err != nil {
@@ -101,6 +111,8 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 	grp, ctx := errgroup.WithContext(context.TODO())
 	comments := make([]*drive.Comment, options.NumThreads)
 
+
+	var indexCommentID string
 	// create the file header itself.
 	grp.Go(func() error {
 		return retry(ctx, func() error {
@@ -110,10 +122,11 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 			}
 
 			header := FileHeader{options}
-			_, err = client.CommentsService().
+			resp, err := client.CommentsService().
 				Create(file.Id, &drive.Comment{Content: string(header.MustMarshall())}).
 				Context(context.TODO()).Fields("id").
 				Do()
+			indexCommentID = resp.Id
 			return err
 		})
 	})
@@ -172,6 +185,17 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 		if deleteErr != nil {
 			return nil, fmt.Errorf("%w (%s)", err, deleteErr)
 		}
+		return nil, err
+	}
+
+	// add the comment ID of the index to appProperties.
+	client, err = service.Take(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	file.AppProperties[IndexCommentID] = indexCommentID
+	_, err = client.FilesService().Update(file.Id, file).Context(ctx).Fields("id").Do()
+	if err != nil {
 		return nil, err
 	}
 

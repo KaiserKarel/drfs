@@ -11,6 +11,7 @@ require (
 	github.com/google/go-cmp v0.4.0
 	github.com/google/uuid v1.1.1
 	github.com/juju/ratelimit v1.0.1
+	github.com/kaiserkarel/qstring v1.0.2 // indirect
 	github.com/kurin/blazer v0.5.3
 	github.com/mattn/go-isatty v0.0.12
 	github.com/minio/minio-go/v6 v6.0.46

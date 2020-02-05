@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package drfs;
+
+message FileHeader {
+    int32 num_threads = 1;
+    repeated ThreadHeader thread_headers = 2;
+}
+
+message ThreadHeader {
+    int32 number = 1;
+    int32 capacity = 2;
+    int64 length = 3;
+    string tail = 4;
+}
+
+message FileIndex {
+    repeated ReplyIndice indice = 1;
+    message ReplyIndice {
+        string commentID = 1;
+        string replyID = 2;
+    }
+}
