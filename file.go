@@ -48,6 +48,8 @@ func FileHeaderFromJSON(p io.Reader) (*FileHeader, error) {
 
 type FileOptions struct {
 	NumThreads int
+	Parents    []string
+	Properties map[string]string
 }
 
 func (f *FileOptions) setDefaults() {
@@ -75,7 +77,11 @@ func OpenCtx(ctx context.Context, file *drive.File, service Service) (*File, err
 	}, nil
 }
 
-func CreateFileCtx(ctx context.Context, service Service, fileName string, options FileOptions, properties map[string]string) (*File, error) {
+func CreateFileCtx(ctx context.Context, service Service, fileName string, options FileOptions) (*File, error) {
+	if options.Properties == nil {
+		options.Properties = map[string]string{}
+	}
+
 	options.setDefaults()
 
 	var fileheader = FileHeader{FileOptions: options}
@@ -86,23 +92,24 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 		return nil, err
 	}
 
-	properties[IsDrfsFile] = PropertyTrue
+	options.Properties[IsDrfsFile] = PropertyTrue
 
 	file, err := client.FilesService().
 		Create(&drive.File{
+			Parents: options.Parents,
 			Name: fileName,
-			AppProperties: properties,
+			Properties: options.Properties,
 		}).
-		Fields("id", "appProperties").
+		Fields("id", "properties").
 		Context(context.TODO()).
 		Do()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to creade drive file: %w", err)
 	}
 
 	emails := service.Emails()
 	if len(emails) > 1 {
-		err = ensurePermissionsSet(ctx, client, emails, file.Id)
+		err = ensurePermissionsSet(context.Background(), client, emails, file.Id)
 		if err != nil {
 			return nil, fmt.Errorf("unable to set permissions: %w", err)
 		}
@@ -115,7 +122,7 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 	var indexCommentID string
 	// create the file header itself.
 	grp.Go(func() error {
-		return retry(ctx, func() error {
+		return retry(context.Background(), func() error {
 			client, err := service.Take(context.TODO(), 1)
 			if err != nil {
 				return err
@@ -133,10 +140,9 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 
 	// create individual threads.
 	for i := 0; i < options.NumThreads; i++ {
-
 		i := i
 		grp.Go(func() error {
-			return retry(ctx, func() error {
+			return retry(context.Background(), func() error {
 				client, err := service.Take(context.TODO(), 1)
 				if err != nil {
 					return err
@@ -148,7 +154,7 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 				}
 				comment, err := client.CommentsService().
 					Create(file.Id, &drive.Comment{Content: string(header.MustMarshall())}).
-					Context(context.TODO()).Fields("id").
+					Context(context.Background()).Fields("id").
 					Do()
 				if err != nil {
 					return err
@@ -189,14 +195,14 @@ func CreateFileCtx(ctx context.Context, service Service, fileName string, option
 	}
 
 	// add the comment ID of the index to appProperties.
-	client, err = service.Take(ctx, 1)
+	client, err = service.Take(context.Background(), 1)
 	if err != nil {
 		return nil, err
 	}
-	file.AppProperties[IndexCommentID] = indexCommentID
-	_, err = client.FilesService().Update(file.Id, file).Context(ctx).Fields("id").Do()
+	options.Properties[IndexCommentID] = indexCommentID
+	_, err = client.FilesService().Update(file.Id, &drive.File{Name:file.Name, Properties: options.Properties, Parents: options.Parents}).Context(context.Background()).Fields("id").Do()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to add IndexCommentID to properties: %w", err)
 	}
 
 	return &File{

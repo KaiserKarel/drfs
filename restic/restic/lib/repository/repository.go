@@ -603,7 +603,7 @@ func (r *Repository) Init(ctx context.Context, password string) error {
 		return err
 	}
 
-	return r.init(ctx, password, cfg)
+	return r.init(context.Background(), password, cfg)
 }
 
 // init creates a new master key with the supplied password and uses it to save

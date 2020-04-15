@@ -2,6 +2,7 @@
 package location
 
 import (
+	drfs "github.com/kaiserkarel/drfs/restic"
 	"strings"
 
 	"github.com/kaiserkarel/drfs/restic/restic/lib/backend/azure"
@@ -40,6 +41,7 @@ var parsers = []parser{
 	{"swift", swift.ParseConfig},
 	{"rest", rest.ParseConfig},
 	{"rclone", rclone.ParseConfig},
+	{"drfs", drfs.ParseConfig},
 }
 
 func isPath(s string) bool {

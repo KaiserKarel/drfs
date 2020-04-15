@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kaiserkarel/drfs"
+	"github.com/kaiserkarel/drfs/restic/restic/lib/backend"
 	"github.com/kaiserkarel/drfs/restic/restic/lib/restic"
 	"github.com/kaiserkarel/qstring"
 	"google.golang.org/api/drive/v3"
 	"io"
+	"log"
 	"os"
 )
 
@@ -17,6 +19,9 @@ const (
 )
 
 type Backend struct {
+	backend.Layout
+	Config
+
 	service drfs.Service
 }
 
@@ -28,39 +33,40 @@ func (b *Backend) Location() string  {
 
 // Test checks if the given file exists
 func (b *Backend) Test(ctx context.Context, h restic.Handle) (bool, error) {
-	client, err := b.service.Take(ctx, 1)
+	f, err := b.getFile(context.Background(), h)
+	if b.IsNotExist(err) {
+		return false, nil
+	}
+
 	if err != nil {
 		return false, err
 	}
-	f, err := client.FilesService().Get(abs(h)).Fields("id").Context(ctx).Do()
-	if err != nil {
-		return false, err
-	}
+
 	return f != nil, nil
 }
 
 // Removes a file described by the absolute name of h.
 func (b *Backend) Remove(ctx context.Context, h restic.Handle) error  {
-	client, err := b.service.Take(ctx, 1)
+	client, err := b.service.Take(context.Background(), 1)
 	if err != nil {
 		return err
 	}
 
 	var query = qstring.Name().Equals(h.Name).And().Properties().Has(ResticFileType, string(h.Type))
-	err = client.FilesService().List().Q(query.String()).Pages(ctx, func(list *drive.FileList) error {
+	err = client.FilesService().List().Q(query.String()).Pages(context.Background(), func(list *drive.FileList) error {
 		for _, f := range list.Files {
-			client, err := b.service.Take(ctx, 1)
+			client, err := b.service.Take(context.Background(), 1)
 			if err != nil {
 				return err
 			}
 
-			err = client.FilesService().Delete(f.Id).Context(ctx).Do()
+			err = client.FilesService().Delete(f.Id).Context(context.Background()).Do()
 			if err != nil {
 				return err
 			}
 
 			if list.IncompleteSearch {
-				_, err := b.service.Take(ctx, 1)
+				_, err := b.service.Take(context.Background(), 1)
 				if err != nil {
 					return err
 				}
@@ -73,12 +79,22 @@ func (b *Backend) Remove(ctx context.Context, h restic.Handle) error  {
 
 // Close is a noop.
 func (b *Backend) Close() error  {
+	panic("Close")
 	return nil
 }
 
 // Save appends the date of a given rd to the file described by the handle.
 func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindReader) error  {
-	return nil
+	if err := h.Valid(); err != nil {
+		return err
+	}
+
+	file, err := b.getOrCreateFile(context.Background(), h)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(file, rd)
+	return err
 }
 
 // Load runs fn with a reader that yields the contents of the file at h at the
@@ -87,35 +103,35 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 //
 // The function fn may be called multiple times during the same Load invocation
 // and therefore must be idempotent.
-//
-// Implementations are encouraged to use backend.DefaultLoad
 func (b *Backend) Load(ctx context.Context, h restic.Handle, length int, offset int64, fn func(rd io.Reader) error) error  {
-	return nil
+	return backend.DefaultLoad(context.Background(), h, length, offset, b.openReader, fn)
 }
+
+func (b *Backend) openReader(ctx context.Context, h restic.Handle, length int, offset int64) (io.ReadCloser, error)  {
+
+	file, err := b.getOrCreateFile(context.Background(), h)
+	if err != nil {
+		return nil, err
+	}
+
+	if offset > 0 {
+		_, err = file.Seek(offset, 0)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if length > 0 {
+		return backend.LimitReadCloser(file, int64(length)), nil
+	}
+	return file, nil
+}
+
+
 
 // Stat returns information about the File identified by h.
 func (b *Backend) Stat(ctx context.Context, h restic.Handle) (restic.FileInfo, error)  {
-	var query = qstring.Name().Equals(h.Name).And().Properties().Has(ResticFileType, string(h.Type)).String()
-
-	client, err := b.service.Take(ctx, 1)
-	if err != nil {
-		return restic.FileInfo{}, err
-	}
-
-	f, err := client.FilesService().List().Q(query).Context(ctx).Do()
-	if err != nil {
-		return restic.FileInfo{}, err
-	}
-
-	if len(f.Files) == 0 {
-		return restic.FileInfo{}, os.ErrNotExist
-	}
-
-	if len(f.Files) > 1 {
-		return restic.FileInfo{}, fmt.Errorf("encountered multiple files matching the query: %d", len(f.Files))
-	}
-
-	file, err := drfs.OpenCtx(ctx, f.Files[0], b.service)
+	file, err := b.getFile(context.Background(), h)
 	if err != nil {
 		return restic.FileInfo{}, err
 	}
@@ -127,7 +143,7 @@ func (b *Backend) Stat(ctx context.Context, h restic.Handle) (restic.FileInfo, e
 
 	return restic.FileInfo{
 		Size: stat.Size(),
-		Name: h.Name,
+		Name: stat.Name(),
 	}, nil
 }
 
@@ -142,14 +158,14 @@ func (b *Backend) Stat(ctx context.Context, h restic.Handle) (restic.FileInfo, e
 func (b *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.FileInfo) error) error  {
 	var query = qstring.Properties().Has(ResticFileType, string(t)).String()
 
-	client, err := b.service.Take(ctx, 1)
+	client, err := b.service.Take(context.Background(), 1)
 	if err != nil {
 		return err
 	}
 
-	err = client.FilesService().List().Q(query).Pages(ctx, func(list *drive.FileList) error {
+	err = client.FilesService().List().Q(query).Pages(context.Background(), func(list *drive.FileList) error {
 		for _, file := range list.Files {
-			f, err := drfs.OpenCtx(ctx, file, b.service)
+			f, err := drfs.OpenCtx(context.Background(), file, b.service)
 			if err != nil {
 				return err
 			}
@@ -168,7 +184,7 @@ func (b *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.Fi
 			}
 		}
 		if list.IncompleteSearch {
-			_, err := b.service.Take(ctx, 1)
+			_, err := b.service.Take(context.Background(), 1)
 			if err != nil {
 				return err
 			}
@@ -188,4 +204,63 @@ func (b *Backend) IsNotExist(err error) bool  {
 // Google Drive file which has a properly canonicalized filename.
 func (b *Backend) Delete(ctx context.Context) error  {
 	return errors.New("backend delete unimplemented")
+}
+
+func (b *Backend) getFile(ctx context.Context, h restic.Handle) (*drfs.File, error)  {
+	filename := b.Layout.Filename(h)
+
+	client, err := b.service.Take(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	query := qstring.Name().Equals(filename)
+
+	resp, err := client.FilesService().List().Q(query.String()).Fields("*").Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Files) > 1 {
+		return nil, errors.New("multiple files found for given filename")
+	}
+
+	if len(resp.Files) == 0 {
+		return nil, drfs.ErrNotFound
+	}
+
+	return drfs.OpenCtx(ctx, resp.Files[0], b.service)
+}
+
+func (b *Backend) createFile(ctx context.Context, h restic.Handle) (*drfs.File, error)  {
+	filename := b.Layout.Filename(h)
+	log.Printf("creating file: %s", filename)
+
+	f, err := drfs.CreateFileCtx(
+		context.Background(), b.service, filename, drfs.FileOptions{
+			NumThreads:1,
+			Properties: map[string]string{
+				ResticFileType: string(h.Type),
+			},
+		},)
+
+	stat, _ := f.Fstat()
+	os.Stdout.WriteString(	fmt.Sprintf("created file: %s", stat.ID()))
+
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func (b *Backend) getOrCreateFile(ctx context.Context, h restic.Handle) (*drfs.File, error)  {
+	f, err := b.getFile(context.Background(), h)
+	if errors.Is(err, drfs.ErrNotFound) {
+		f, err = b.createFile(context.Background(), h)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }

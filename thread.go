@@ -51,6 +51,7 @@ type Thread struct {
 	Header    ThreadHeader `json:"h"`
 
 	service  Service
+	acursor  int64 // absolute position within thread
 	cursor   int // current read position within reply
 	ri       int // index of current reply being read.
 	replies  *drive.ReplyList
@@ -60,6 +61,73 @@ type Thread struct {
 
 func (t *Thread) Capacity() int {
 	return t.Header.Capacity
+}
+
+func (t *Thread) Seek(offset int64, whence int) (int64, error)  {
+	if whence == io.SeekEnd {
+	}
+
+	switch whence {
+	case io.SeekEnd:
+		return 0, errors.New("seekend not implemented")
+	case io.SeekStart:
+		return t.seekStart(offset)
+	case io.SeekCurrent:
+		return t.seekCurrent(offset)
+	default:
+		return 0, errors.New("unknown whence")
+	}
+}
+
+func (t *Thread) seekStart(offset int64) (int64, error)  {
+	ctx := context.Background()
+	err := t.jumpToStart(ctx)
+	if err != nil {
+		return t.acursor, err
+	}
+	return t.seekCurrent(offset)
+}
+
+
+func (t *Thread) seekCurrent(offset int64) (int64, error)  {
+	ctx := context.Background()
+	for {
+		for i, r := range t.replies.Replies {
+			t.acursor += int64(len(r.Content)) - 2 // don't count padding
+			t.ri = i
+
+			if t.acursor > offset {
+				t.acursor = offset
+				return t.acursor, nil
+			}
+		}
+
+		// exhausted replies
+		if t.replies.NextPageToken == "" {
+			return t.acursor, io.EOF
+		}
+
+		err := retry(ctx, func() error {
+			return t.fetchNextReplies(ctx)
+		})
+		if err != nil {
+			return t.acursor, err
+		}
+	}
+}
+
+func (t *Thread) jumpToStart(ctx context.Context) error {
+	if t.acursor != 0 {
+		t.acursor = 0
+		t.cursor = 0
+		err := retry(ctx, func() error {
+			return t.fetchInitialReplies(ctx)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *Thread) Update(ctx context.Context, p []byte) error {
@@ -139,26 +207,9 @@ func (t *Thread) ReadCtx(ctx context.Context, p []byte) (int, error) {
 		}
 	}
 
-	// fetch new bulk of replies
 	if t.ri > len(t.replies.Replies) {
 		err := retry(ctx, func() error {
-			client, err := t.service.Take(ctx, 1)
-			if err != nil {
-				return err
-			}
-			replies, err := client.RepliesService().
-				List(t.FileID, t.CommentID).
-				PageToken(t.replies.NextPageToken).
-				Fields("id", "content").
-				Context(ctx).
-				Do()
-
-			if err != nil {
-				return err
-			}
-			t.replies = replies
-			t.ri = 0
-			return nil
+			return t.fetchNextReplies(ctx)
 		})
 		if err != nil {
 			return 0, err
@@ -176,6 +227,7 @@ func (t *Thread) ReadCtx(ctx context.Context, p []byte) (int, error) {
 	read := min(len(content[t.cursor:]), len(p))
 
 	t.cursor += read
+	t.acursor += int64(read)
 	if t.cursor == EffectiveReplySize {
 		t.cursor = 0
 		t.ri++
@@ -272,6 +324,45 @@ func AppendToReply(ctx context.Context, s Service, fileID string, bucket Thread,
 		return &bucket.Header, fmt.Errorf("update comment: %w", err)
 	}
 	return &bucket.Header, nil
+}
+
+func (t *Thread) fetchNextReplies(ctx context.Context) error {
+	client, err := t.service.Take(ctx, 1)
+	if err != nil {
+		return err
+	}
+	replies, err := client.RepliesService().
+		List(t.FileID, t.CommentID).
+		PageToken(t.replies.NextPageToken).
+		Fields("id", "content").
+		Context(ctx).
+		Do()
+
+	if err != nil {
+		return err
+	}
+	t.replies = replies
+	t.ri = 0
+	return nil
+}
+
+func (t *Thread) fetchInitialReplies(ctx context.Context) error {
+	client, err := t.service.Take(ctx, 1)
+	if err != nil {
+		return err
+	}
+	replies, err := client.RepliesService().
+		List(t.FileID, t.CommentID).
+		Fields("id", "content").
+		Context(ctx).
+		Do()
+
+	if err != nil {
+		return err
+	}
+	t.replies = replies
+	t.ri = 0
+	return nil
 }
 
 func min(a, b int) int {

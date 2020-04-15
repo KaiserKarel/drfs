@@ -13,11 +13,3 @@ message ThreadHeader {
     int64 length = 3;
     string tail = 4;
 }
-
-message FileIndex {
-    repeated ReplyIndice indice = 1;
-    message ReplyIndice {
-        string commentID = 1;
-        string replyID = 2;
-    }
-}

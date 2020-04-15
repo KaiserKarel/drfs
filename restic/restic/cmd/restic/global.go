@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	drfs "github.com/kaiserkarel/drfs/restic"
 	"github.com/kaiserkarel/drfs/restic/restic/lib/backend"
 	"github.com/kaiserkarel/drfs/restic/restic/lib/backend/azure"
 	"github.com/kaiserkarel/drfs/restic/restic/lib/backend/b2"
@@ -86,12 +87,7 @@ var globalOptions = GlobalOptions{
 }
 
 func init() {
-	var cancel context.CancelFunc
-	globalOptions.ctx, cancel = context.WithCancel(context.Background())
-	AddCleanupHandler(func() error {
-		cancel()
-		return nil
-	})
+	globalOptions.ctx = context.TODO()
 
 	f := cmdRoot.PersistentFlags()
 	f.StringVarP(&globalOptions.Repo, "repo", "r", os.Getenv("RESTIC_REPOSITORY"), "repository to backup to or restore from (default: $RESTIC_REPOSITORY)")
@@ -456,6 +452,9 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 	// only apply options for a particular backend here
 	opts = opts.Extract(loc.Scheme)
 
+	fmt.Println("parsing config")
+
+
 	switch loc.Scheme {
 	case "local":
 		cfg := loc.Config.(local.Config)
@@ -581,6 +580,13 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 
 		debug.Log("opening rest repository at %#v", cfg)
 		return cfg, nil
+	case "drfs":
+		fmt.Println("building drfs backend")
+		cfg := loc.Config.(drfs.Config)
+		if err := opts.Apply(loc.Scheme, &cfg); err != nil {
+			return nil, err
+		}
+		return cfg, nil
 	}
 
 	return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -637,6 +643,8 @@ func open(s string, gopts GlobalOptions, opts options.Options) (restic.Backend, 
 		be, err = rest.Open(cfg.(rest.Config), rt)
 	case "rclone":
 		be, err = rclone.Open(cfg.(rclone.Config), lim)
+	case "drfs":
+		be, err = drfs.Open(cfg.(drfs.Config))
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -662,10 +670,12 @@ func open(s string, gopts GlobalOptions, opts options.Options) (restic.Backend, 
 // Create the backend specified by URI.
 func create(s string, opts options.Options) (restic.Backend, error) {
 	debug.Log("parsing location %v", s)
+
 	loc, err := location.Parse(s)
 	if err != nil {
 		return nil, err
 	}
+
 
 	cfg, err := parseConfig(loc, opts)
 	if err != nil {
@@ -700,6 +710,8 @@ func create(s string, opts options.Options) (restic.Backend, error) {
 		return rest.Create(cfg.(rest.Config), rt)
 	case "rclone":
 		return rclone.Open(cfg.(rclone.Config), nil)
+	case "drfs":
+		return drfs.Open(cfg.(drfs.Config))
 	}
 
 	debug.Log("invalid repository scheme: %v", s)
